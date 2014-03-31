@@ -712,17 +712,6 @@ class RedditFooter(CachedTemplate):
 
     def __init__(self):
         self.nav = [
-            NavMenu([
-                    NamedButton("blog", False, nocname=True),
-                    NamedButton("about", False, nocname=True),
-                    NamedButton("team", False, nocname=True, dest="/about/team"),
-                    NamedButton("code", False, nocname=True),
-                    NamedButton("ad_inq", False, nocname=True),
-                    NamedButton("jobs", False, nocname=True, dest="/r/redditjobs"),
-                ],
-                title = _("about"),
-                type = "flat_vert",
-                separator = ""),
 
             NavMenu([
                     NamedButton("wiki", False, nocname=True),
