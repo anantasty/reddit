@@ -58,7 +58,7 @@
          %if thing.prev_search:
            value="${thing.prev_search}" style="color:black"
          %endif
-         name="q" placeholder="${_('search reddit')}" />
+         name="q" placeholder="${_('search')}" />
   %if thing.subreddit_search:
     
   %elif thing.simple:
@@ -78,7 +78,7 @@
       ${_('limit my search to %(path)s') % dict(path=thing.site.path.rstrip('/'))}</label>
     %endif
     ${search_faq()}
-    <input type="submit" value="${_('search reddit')}" />
+    <input type="submit" value="${_('search')}" />
   %endif
 
   %for k, v in thing.search_params.iteritems():

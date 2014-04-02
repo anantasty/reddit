@@ -31,6 +31,7 @@ from pylons import g, c
 import re
 import time
 import urllib
+import requests
 
 import l2cs
 
@@ -482,24 +483,20 @@ class CloudSearchUploader(object):
         Raises CloudSearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
-        connection = httplib.HTTPConnection(self.doc_api, 80)
+        connection_url = 'http://{}{}'.format(self.doc_api.replace("'",''), "/2013-01-01/documents/batch")
         chunker = chunk_xml(docs)
-        try:
-            for data in chunker:
-                headers = {}
-                headers['Content-Type'] = 'application/xml'
-                # HTTPLib calculates Content-Length header automatically
-                connection.request('POST', "/2011-02-01/documents/batch",
-                                   data, headers)
-                response = connection.getresponse()
-                if 200 <= response.status < 300:
-                    responses.append(response.read())
-                else:
-                    raise CloudSearchHTTPError(response.status,
-                                               response.reason,
-                                               response.read())
-        finally:
-            connection.close()
+        for data in chunker:
+            headers = {}
+            headers['Content-Type'] = 'application/xml'
+            # HTTPLib calculates Content-Length header automatically
+            response = requests.post(connection_url,
+                                     data=data, headers=headers)
+            if 200 <= response.status_code < 300:
+                responses.append(response.text)
+            else:
+                raise CloudSearchHTTPError(response.status_code,
+                                           response.reason,
+                                           response.text)
         return responses
 
 
@@ -654,7 +651,7 @@ def rebuild_link_index(start_at=None, sleeptime=1, cls=Link,
     q = r2utils.progress(q, verbosity=1000, estimate=estimate, persec=True,
                          key=_progress_key)
     for chunk in r2utils.in_chunks(q, size=chunk_size):
-        uploader.things = chunk
+        uploader.fullnames = [link._fullname for link in chunk]
         for x in range(5):
             try:
                 uploader.inject()
@@ -731,7 +728,7 @@ class Results(object):
         return self._subreddits
 
 
-_SEARCH = "/2011-02-01/search?"
+_SEARCH = "/2013-01-01/search?"
 INVALID_QUERY_CODES = ('CS-UnknownFieldInMatchExpression',
                        'CS-IncorrectFieldTypeInMatchExpression',
                        'CS-InvalidMatchSetExpression',)
@@ -743,19 +740,19 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
         search_api = g.CLOUDSEARCH_SEARCH_API
     if faceting is None:
         faceting = DEFAULT_FACETS
-    path = _encode_query(query, bq, faceting, size, start, rank, return_fields)
+    params = _encode_query(query, bq, faceting, size, start, rank, return_fields)
+    del params['q.parser']
     timer = None
     if record_stats:
         timer = g.stats.get_timer("cloudsearch_timer")
         timer.start()
-    connection = httplib.HTTPConnection(search_api, 80)
+    connection_url = 'http://{}{}'.format(search_api.replace("'", ''), _SEARCH)
     try:
-        connection.request('GET', path)
-        resp = connection.getresponse()
-        response = resp.read()
-        if record_stats:
-            g.stats.action_count("event.search_query", resp.status)
-        if resp.status >= 300:
+        resp = requests.get(connection_url, params=params)
+        response = resp.text
+        # if record_stats:
+        #     g.stats.action_count("event.search_query", resp.status_code)
+        if resp.status_code >= 300:
             try:
                 reasons = json.loads(response)
             except ValueError:
@@ -765,11 +762,10 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
                 for message in messages:
                     if message['code'] in INVALID_QUERY_CODES:
                         raise InvalidQuery(resp.status, resp.reason, message,
-                                           path, reasons)
-            raise CloudSearchHTTPError(resp.status, resp.reason, path,
+                                           params, reasons)
+            raise CloudSearchHTTPError(resp.status_code, resp.text, params,
                                        response)
     finally:
-        connection.close()
         if timer is not None:
             timer.stop()
 
@@ -799,24 +795,27 @@ def _encode_query(query, bq, faceting, size, start, rank, return_fields):
         raise ValueError("Need query or bq")
     params = {}
     if bq:
-        params["bq"] = bq
+        params["q.parser"] = 'structured'
+        params["q"] = bq
     else:
         params["q"] = query
-    params["results-type"] = "json"
+    params["format"] = "json"
     params["size"] = size
     params["start"] = start
-    params["rank"] = rank
+    if rank.startswith('-'):
+        params["sort"] = '{} {}'.format(rank.replace('-',''), 'desc')
+    else:
+        params["sort"] = '{} {}'.format(rank.replace('+',''), 'asc')
     if faceting:
-        params["facet"] = ",".join(faceting.iterkeys())
         for facet, options in faceting.iteritems():
-            params["facet-%s-top-n" % facet] = options.get("count", 20)
+            opts_dict = {}
+            opts_dict['size'] = options.get("count", 20)
             if "sort" in options:
-                params["facet-%s-sort" % facet] = options["sort"]
+                opts_dict['sort'] = options["sort"]
+            params['facet.{}'.format(facet)] = json.dumps(opts_dict) 
     if return_fields:
         params["return-fields"] = ",".join(return_fields)
-    encoded_query = urllib.urlencode(params)
-    path = _SEARCH + encoded_query
-    return path
+    return params
 
 
 class CloudSearchQuery(object):
@@ -936,15 +935,11 @@ class CloudSearchQuery(object):
                                rank=sort, search_api=cls.search_api,
                                faceting=faceting, record_stats=True)
 
-        warnings = response['info'].get('messages', [])
-        for warning in warnings:
-            g.log.warning("%(code)s (%(severity)s): %(message)s" % warning)
-
         hits = response['hits']['found']
         docs = [doc['id'] for doc in response['hits']['hit']]
         facets = response.get('facets', {})
         for facet in facets.keys():
-            values = facets[facet]['constraints']
+            values = facets[facet].get('buckets')
             facets[facet] = values
 
         results = Results(docs, hits, facets)
@@ -980,7 +975,7 @@ class LinkSearchQuery(CloudSearchQuery):
              yesno_fields=LinkFields.lucene_fieldnames(type_="yesno"),
              schema=schema)
     known_syntaxes = ("cloudsearch", "lucene", "plain")
-    default_syntax = "lucene"
+    default_syntax = known_syntaxes[0]
 
     def customize_query(self, bq):
         queries = [bq]
@@ -1042,7 +1037,6 @@ class LinkSearchQuery(CloudSearchQuery):
             bq.append(")")
         elif not isinstance(sr, FakeSubreddit):
             bq = ["sr_id:%s" % sr._id]
-
         return ' '.join(bq)
 
 
@@ -1054,5 +1048,5 @@ class SubredditSearchQuery(CloudSearchQuery):
     sorts_menu_mapping = {'relevance': 1,
                           }
 
-    known_syntaxes = ("plain",)
-    default_syntax = "plain"
+    known_syntaxes = ("cloudsearch", "lucene", "plain")
+    default_syntax = known_syntaxes[0]

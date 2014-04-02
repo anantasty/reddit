@@ -720,22 +720,11 @@ class RedditFooter(CachedTemplate):
 
     def __init__(self):
         self.nav = [
-            NavMenu([
-                    NamedButton("blog", False, nocname=True),
-                    NamedButton("about", False, nocname=True),
-                    NamedButton("team", False, nocname=True, dest="/about/team"),
-                    NamedButton("code", False, nocname=True),
-                    NamedButton("ad_inq", False, nocname=True),
-                    NamedButton("jobs", False, nocname=True, dest="/r/redditjobs"),
-                ],
-                title = _("about"),
-                type = "flat_vert",
-                separator = ""),
 
             NavMenu([
                     NamedButton("wiki", False, nocname=True),
                     OffsiteButton(_("FAQ"), dest = "/wiki/faq", nocname=True),
-                    OffsiteButton(_("reddiquette"), nocname=True, dest = "/wiki/reddiquette"),
+                    OffsiteButton(_("etiquette"), nocname=True, dest = "/wiki/reddiquette"),
                     NamedButton("rules", False, nocname=True),
                     NamedButton("contact", False),
                 ],
@@ -754,16 +743,6 @@ class RedditFooter(CachedTemplate):
                 type = "flat_vert",
                 separator = ""),
 
-            NavMenu([
-                    NamedButton("gold", False, nocname=True, dest = "/gold/about", css_class = "buygold"),
-                    NamedButton("store", False, nocname=True),
-                    OffsiteButton(_("redditgifts"), "http://redditgifts.com"),
-                    OffsiteButton(_("reddit.tv"), "http://reddit.tv"),
-                    OffsiteButton(_("radio reddit"), "http://radioreddit.com"),
-                ],
-                title = _("<3"),
-                type = "flat_vert",
-                separator = "")
         ]
         CachedTemplate.__init__(self)
 
@@ -1897,7 +1876,7 @@ class WelcomeBar(InfoBar):
         if messages:
             message = random.choice(messages).split(" / ")
         else:
-            message = (_("reddit is a platform for internet communities"),
+            message = (_("This is a platform for sport communities"),
                        _("where your votes shape what the world is talking about."))
         InfoBar.__init__(self, message=message)
 
