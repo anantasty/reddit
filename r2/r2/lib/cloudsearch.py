@@ -748,7 +748,6 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
         timer.start()
     connection_url = 'http://{}{}'.format(search_api.replace("'", ''), _SEARCH)
     try:
-        print '\n\n\n{}\n\n\n\n{}\n\n\n\n\n\n'.format(connection_url, params)
         resp = requests.get(connection_url, params=params)
         response = resp.text
         if record_stats:
