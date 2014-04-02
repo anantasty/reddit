@@ -729,7 +729,7 @@ class Results(object):
         return self._subreddits
 
 
-_SEARCH = "/2011-02-01/search?"
+_SEARCH = "/2013-01-01/search?"
 INVALID_QUERY_CODES = ('CS-UnknownFieldInMatchExpression',
                        'CS-IncorrectFieldTypeInMatchExpression',
                        'CS-InvalidMatchSetExpression',)
@@ -741,19 +741,19 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
         search_api = g.CLOUDSEARCH_SEARCH_API
     if faceting is None:
         faceting = DEFAULT_FACETS
-    path = _encode_query(query, bq, faceting, size, start, rank, return_fields)
+    params = _encode_query(query, bq, faceting, size, start, rank, return_fields)
     timer = None
     if record_stats:
         timer = g.stats.get_timer("cloudsearch_timer")
         timer.start()
-    connection = httplib.HTTPConnection(search_api, 80)
+    connection_url = 'http://{}{}'.format(search_api.replace("'", ''), _SEARCH)
     try:
-        connection.request('GET', path)
-        resp = connection.getresponse()
-        response = resp.read()
+        print '\n\n\n{}\n\n\n\n{}\n\n\n\n\n\n'.format(connection_url, params)
+        resp = requests.get(connection_url, params=params)
+        response = resp.text
         if record_stats:
             g.stats.action_count("event.search_query", resp.status)
-        if resp.status >= 300:
+        if resp.status_code >= 300:
             try:
                 reasons = json.loads(response)
             except ValueError:
@@ -763,11 +763,10 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
                 for message in messages:
                     if message['code'] in INVALID_QUERY_CODES:
                         raise InvalidQuery(resp.status, resp.reason, message,
-                                           path, reasons)
-            raise CloudSearchHTTPError(resp.status, resp.reason, path,
+                                           params, reasons)
+            raise CloudSearchHTTPError(resp.status_code, resp.text, params,
                                        response)
     finally:
-        connection.close()
         if timer is not None:
             timer.stop()
 
@@ -800,21 +799,23 @@ def _encode_query(query, bq, faceting, size, start, rank, return_fields):
         params["bq"] = bq
     else:
         params["q"] = query
-    params["results-type"] = "json"
+    params["format"] = "json"
     params["size"] = size
     params["start"] = start
-    params["rank"] = rank
+    if rank.startswith('-'):
+        params["sort"] = '{} {}'.format(rank.replace('-',''), 'desc')
+    else:
+        params["sort"] = '{} {}'.format(rank.replace('+',''), 'asc')
     if faceting:
-        params["facet"] = ",".join(faceting.iterkeys())
         for facet, options in faceting.iteritems():
-            params["facet-%s-top-n" % facet] = options.get("count", 20)
+            opts_dict = {}
+            opts_dict['size'] = options.get("count", 20)
             if "sort" in options:
-                params["facet-%s-sort" % facet] = options["sort"]
+                opts_dict['sort'] = options["sort"]
+            params['facet.{}'.format(facet)] = json.dumps(opts_dict) 
     if return_fields:
         params["return-fields"] = ",".join(return_fields)
-    encoded_query = urllib.urlencode(params)
-    path = _SEARCH + encoded_query
-    return path
+    return params
 
 
 class CloudSearchQuery(object):
