@@ -489,7 +489,7 @@ class CloudSearchUploader(object):
                 headers = {}
                 headers['Content-Type'] = 'application/xml'
                 # HTTPLib calculates Content-Length header automatically
-                connection.request('POST', "/2011-02-01/documents/batch",
+                connection.request('POST', "/2013-01-01/documents/batch",
                                    data, headers)
                 response = connection.getresponse()
                 if 200 <= response.status < 300:
@@ -654,7 +654,7 @@ def rebuild_link_index(start_at=None, sleeptime=1, cls=Link,
     q = r2utils.progress(q, verbosity=1000, estimate=estimate, persec=True,
                          key=_progress_key)
     for chunk in r2utils.in_chunks(q, size=chunk_size):
-        uploader.things = chunk
+        uploader.fullnames = [link._fullname for link in chunk]
         for x in range(5):
             try:
                 uploader.inject()
