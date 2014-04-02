@@ -144,7 +144,7 @@ def make_map():
        connect('/:sort', controller='browse', sort='top',
           action='listing', requirements=dict(sort='top|controversial'))
        connect('/:controller', action='listing',
-          requirements=dict(controller="hot|new|rising|randomrising"))
+          requirements=dict(controller="hot|new|rising|randomrising|ads"))
 
     mc('/user/:username/:where/:show', controller='user', action='listing')
     
@@ -238,7 +238,7 @@ def make_map():
     mc('/', controller='hot', action='listing')
 
     mc('/:controller', action='listing',
-       requirements=dict(controller="hot|new|rising|randomrising"))
+       requirements=dict(controller="hot|new|rising|randomrising|ads"))
     mc('/saved', controller='user', action='saved_redirect')
 
     mc('/by_id/:names', controller='byId', action='listing')
@@ -283,6 +283,7 @@ def make_map():
 
     mc('/api/wiki/edit', controller='wikiapi', action='wiki_edit')
     mc('/api/wiki/hide', controller='wikiapi', action='wiki_revision_hide')
+    mc('/api/wiki/delete', controller='wikiapi', action='wiki_revision_delete')
     mc('/api/wiki/revert', controller='wikiapi', action='wiki_revision_revert')
     mc('/api/wiki/alloweditor/:act', controller='wikiapi',
        requirements=dict(act="del|add"), action='wiki_allow_editor')

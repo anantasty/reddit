@@ -410,6 +410,11 @@ class Reddit(Templated):
         if not c.user_is_loggedin and self.loginbox and not g.read_only_mode:
             ps.append(LoginFormWide())
 
+        if isinstance(c.site, DomainSR) and c.user_is_admin:
+            from r2.lib.pages.admin_pages import AdminNotesSidebar
+            notebar = AdminNotesSidebar('domain', c.site.domain)
+            ps.append(notebar)
+
         if c.user.pref_show_sponsorships or not c.user.gold:
             ps.append(SponsorshipBox())
 
@@ -625,6 +630,9 @@ class Reddit(Templated):
             if c.site._should_wiki and (c.site.wikimode != 'disabled' or mod):
                 if not g.disable_wiki:
                     main_buttons.append(NavButton('wiki', 'wiki'))
+
+            if isinstance(c.site, (Subreddit, DefaultSR, MultiReddit)):
+                main_buttons.append(NavButton(menu.promoted, 'ads'))
 
         more_buttons = []
 
@@ -1666,6 +1674,13 @@ class ProfilePage(Reddit):
             ])
             rb.push(scb)
 
+        if c.user_is_admin:
+            from admin_pages import AdminSidebar
+            rb.push(AdminSidebar(self.user))
+        elif c.user_is_sponsor:
+            from admin_pages import SponsorSidebar
+            rb.push(SponsorSidebar(self.user))
+
         mod_sr_ids = Subreddit.reverse_moderator_ids(self.user)
         all_mod_srs = Subreddit._byID(mod_sr_ids, data=True,
                                       return_dict=False)
@@ -1673,13 +1688,6 @@ class ProfilePage(Reddit):
         if mod_srs:
             rb.push(SideContentBox(title=_("moderator of"),
                                    content=[SidebarModList(mod_srs)]))
-
-        if c.user_is_admin:
-            from admin_pages import AdminSidebar
-            rb.push(AdminSidebar(self.user))
-        elif c.user_is_sponsor:
-            from admin_pages import SponsorSidebar
-            rb.push(SponsorSidebar(self.user))
 
         if (c.user == self.user or c.user.employee or
             self.user.pref_public_server_seconds):

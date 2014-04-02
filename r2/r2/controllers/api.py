@@ -1684,10 +1684,12 @@ class ApiController(RedditController):
                    prevstyle=VLength('prevstyle', max_length=36,
                                      docs={"prevstyle":
                                            "(optional) a revision ID"}),
+                   reason=VPrintable('reason', 256, empty_error=None),
                    op = VOneOf('op',['save','preview']))
     @api_doc(api_section.subreddits, uses_site=True)
     def POST_subreddit_stylesheet(self, form, jquery,
-                                  stylesheet_contents = '', prevstyle='', op='save'):
+                                  stylesheet_contents = '', prevstyle='',
+                                  op='save', reason=None):
         """Update a subreddit's stylesheet.
 
         `op` should be `save` to update the contents of the stylesheet.
@@ -1727,7 +1729,12 @@ class ApiController(RedditController):
 
         if op == 'save':
             try:
-                wr = c.site.change_css(stylesheet_contents, parsed, prevstyle)
+                wr = c.site.change_css(
+                    stylesheet_contents,
+                    parsed,
+                    prevstyle,
+                    reason=reason,
+                )
                 form.find('.conflict_box').hide()
                 form.find('.errors').hide()
                 form.set_html(".status", _('saved'))
@@ -2876,29 +2883,33 @@ class ApiController(RedditController):
         See also: [/subreddits/mine/](#GET_subreddits_mine_{where}).
 
         """
-        # only users who can make edits are allowed to subscribe.
-        # Anyone can leave.
-        if sr and (action != 'sub' or sr.can_comment(c.user)):
-            self._subscribe(sr, action == 'sub')
 
-    @classmethod
-    def _subscribe(cls, sr, sub):
+        if not sr:
+            return abort(404, 'not found')
+        elif action == "sub" and not sr.can_comment(c.user):
+            return abort(403, 'permission denied')
+
         try:
             Subreddit.subscribe_defaults(c.user)
 
-            if sub:
+            if action == "sub":
                 if sr.add_subscriber(c.user):
                     sr._incr('_ups', 1)
+                else:
+                    # tried to subscribe but user was already subscribed
+                    pass
             else:
                 if sr.remove_subscriber(c.user):
                     sr._incr('_ups', -1)
+                else:
+                    # tried to unsubscribe but user was not subscribed
+                    return abort(404, 'not found')
             changed(sr, True)
         except CreationError:
             # This only seems to happen when someone is pounding on the
             # subscribe button or the DBs are really lagged; either way,
             # some other proc has already handled this subscribe request.
             return
-
 
     @validatedForm(VAdmin(),
                    VModhash(),
@@ -3899,3 +3910,21 @@ class ApiController(RedditController):
             return
 
         LinkVisitsByAccount._visit(c.user, links)
+
+    @validatedForm(
+        VAdmin(),
+        VModhash(),
+        system=VLength('system', 1024),
+        subject=VLength('subject', 1024),
+        note=VLength('note', 10000),
+        author=VLength('author', 1024),
+    )
+    def POST_add_admin_note(self, form, jquery, system, subject, note, author):
+        if form.has_errors(('system', 'subject', 'note', 'author'),
+                           errors.TOO_LONG):
+            return
+
+        if note:
+            from r2.models.admin_notes import AdminNotesBySystem
+            AdminNotesBySystem.add(system, subject, note, author)
+        form.refresh()

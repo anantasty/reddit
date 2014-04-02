@@ -1,6 +1,8 @@
 r.saved = {}
 
 r.saved.SaveCategories = Backbone.Collection.extend({
+    model: Backbone.Model.extend({idAttribute: 'category'}),
+
     url: '/api/saved_categories.json',
 
     fetchOnce: function() {
@@ -8,6 +10,10 @@ r.saved.SaveCategories = Backbone.Collection.extend({
             this._fetched = this.fetch()
         }
         return this._fetched
+    },
+
+    comparator: function(item) {
+        return item.get('category')
     },
 
     parse: function(response) {
@@ -24,7 +30,7 @@ r.saved.SaveDialog = r.ui.Bubble.extend({
         "click": "clicked",
         "submit": "save",
         "mouseout": "mouseout",
-        "mouseover": "queueShow",
+        "mouseover": "cancelTimeout",
         "change select": "change"
     },
 
@@ -44,7 +50,6 @@ r.saved.SaveDialog = r.ui.Bubble.extend({
         r.ui.Bubble.prototype.initialize.apply(this)
         r.saved.categories.fetchOnce().then(_.bind(this.show, this))
         $('body').on('click.savedialog', _.bind(this.hideNow, this))
-        this.listenTo(r.saved.categories, 'sync', this.show)
     },
 
     hideNow: function() {
@@ -75,6 +80,10 @@ r.saved.SaveDialog = r.ui.Bubble.extend({
             $category.hide()
         }
         r.saved.SaveButton.setSaved(this.$parent)
+        if (this.category) {
+            r.saved.categories.add({category: this.category})
+            r.saved.categories.sort()
+        }
         this.hide()
     },
 
@@ -82,6 +91,9 @@ r.saved.SaveDialog = r.ui.Bubble.extend({
         e.preventDefault()
         this.category = this.$el.find('.savedcategory').val()
         this.$el.find('select, .savedcategory').attr('disabled', true)
+        if (!this.category) {
+            return this.success()
+        }
         this.$el.addClass('working')
         r.ajax({
             type: 'POST',
@@ -100,7 +112,7 @@ r.saved.SaveDialog = r.ui.Bubble.extend({
 
     show: function() {
         r.ui.Bubble.prototype.show.apply(this)
-        this.$el.find('input[type=submit]').focus()
+        this.$el.find('.savedcategory').focus()
     },
 
     render: function() {
@@ -134,10 +146,9 @@ r.saved.SaveButton = {
     },
 
     save: function($el) {
+        this.request($el, 'save', this.setSaved)
         if (r.config.gold) {
             new r.saved.SaveDialog({parent: $el, group: r.saved.SaveButton})
-        } else {
-            this.request($el, 'save', this.setSaved)
         }
     },
 
