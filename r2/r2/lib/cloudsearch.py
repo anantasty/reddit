@@ -31,6 +31,7 @@ from pylons import g, c
 import re
 import time
 import urllib
+import requests
 
 import l2cs
 
@@ -482,24 +483,21 @@ class CloudSearchUploader(object):
         Raises CloudSearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
-        connection = httplib.HTTPConnection(self.doc_api, 80)
+        connection_url = 'http://{}{}'.format(self.doc_api.replace("'",''), "/2013-01-01/documents/batch")
         chunker = chunk_xml(docs)
-        try:
-            for data in chunker:
-                headers = {}
-                headers['Content-Type'] = 'application/xml'
-                # HTTPLib calculates Content-Length header automatically
-                connection.request('POST', "/2013-01-01/documents/batch",
-                                   data, headers)
-                response = connection.getresponse()
-                if 200 <= response.status < 300:
-                    responses.append(response.read())
-                else:
-                    raise CloudSearchHTTPError(response.status,
-                                               response.reason,
-                                               response.read())
-        finally:
-            connection.close()
+        for data in chunker:
+            headers = {}
+            headers['Content-Type'] = 'application/xml'
+            # HTTPLib calculates Content-Length header automatically
+            print '\n\n\n\n{}\n\n\n\n'.format(connection_url, headers)
+            response = requests.post(connection_url,
+                                     data=data, headers=headers)
+            if 200 <= response.status_code < 300:
+                responses.append(response.text)
+            else:
+                raise CloudSearchHTTPError(response.status_code,
+                                           response.reason,
+                                           response.text)
         return responses
 
 
