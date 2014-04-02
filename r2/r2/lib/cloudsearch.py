@@ -939,7 +939,7 @@ class CloudSearchQuery(object):
         docs = [doc['id'] for doc in response['hits']['hit']]
         facets = response.get('facets', {})
         for facet in facets.keys():
-            values = [item.get('value') for item in facets[facet]['buckets']]
+            values = facets[facet].get('buckets')
             facets[facet] = values
 
         results = Results(docs, hits, facets)
@@ -1048,5 +1048,5 @@ class SubredditSearchQuery(CloudSearchQuery):
     sorts_menu_mapping = {'relevance': 1,
                           }
 
-    known_syntaxes = ("plain",)
-    default_syntax = "plain"
+    known_syntaxes = ("cloudsearch", "lucene", "plain")
+    default_syntax = known_syntaxes[0]
