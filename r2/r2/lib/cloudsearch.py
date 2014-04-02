@@ -489,7 +489,6 @@ class CloudSearchUploader(object):
             headers = {}
             headers['Content-Type'] = 'application/xml'
             # HTTPLib calculates Content-Length header automatically
-            print '\n\n\n\n{}\n\n\n\n'.format(connection_url, headers)
             response = requests.post(connection_url,
                                      data=data, headers=headers)
             if 200 <= response.status_code < 300:
@@ -742,6 +741,7 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
     if faceting is None:
         faceting = DEFAULT_FACETS
     params = _encode_query(query, bq, faceting, size, start, rank, return_fields)
+    del params['q.parser']
     timer = None
     if record_stats:
         timer = g.stats.get_timer("cloudsearch_timer")
@@ -750,8 +750,8 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
     try:
         resp = requests.get(connection_url, params=params)
         response = resp.text
-        if record_stats:
-            g.stats.action_count("event.search_query", resp.status)
+        # if record_stats:
+        #     g.stats.action_count("event.search_query", resp.status_code)
         if resp.status_code >= 300:
             try:
                 reasons = json.loads(response)
@@ -795,7 +795,8 @@ def _encode_query(query, bq, faceting, size, start, rank, return_fields):
         raise ValueError("Need query or bq")
     params = {}
     if bq:
-        params["bq"] = bq
+        params["q.parser"] = 'structured'
+        params["q"] = bq
     else:
         params["q"] = query
     params["format"] = "json"
@@ -934,15 +935,11 @@ class CloudSearchQuery(object):
                                rank=sort, search_api=cls.search_api,
                                faceting=faceting, record_stats=True)
 
-        warnings = response['info'].get('messages', [])
-        for warning in warnings:
-            g.log.warning("%(code)s (%(severity)s): %(message)s" % warning)
-
         hits = response['hits']['found']
         docs = [doc['id'] for doc in response['hits']['hit']]
         facets = response.get('facets', {})
         for facet in facets.keys():
-            values = facets[facet]['constraints']
+            values = [item.get('value') for item in facets[facet]['buckets']]
             facets[facet] = values
 
         results = Results(docs, hits, facets)
@@ -978,7 +975,7 @@ class LinkSearchQuery(CloudSearchQuery):
              yesno_fields=LinkFields.lucene_fieldnames(type_="yesno"),
              schema=schema)
     known_syntaxes = ("cloudsearch", "lucene", "plain")
-    default_syntax = "lucene"
+    default_syntax = known_syntaxes[0]
 
     def customize_query(self, bq):
         queries = [bq]
@@ -1040,7 +1037,6 @@ class LinkSearchQuery(CloudSearchQuery):
             bq.append(")")
         elif not isinstance(sr, FakeSubreddit):
             bq = ["sr_id:%s" % sr._id]
-
         return ' '.join(bq)
 
 
